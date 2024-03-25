@@ -55,10 +55,13 @@ int moving_average(MovingAverage *ma, int new_value) {
 
 int scaled_value(int raw_value) {
     int scaled_value;
-    if (raw_value < 30 || raw_value > 4065) {
+    raw_value -= 2048; // Center the value
+    raw_value /= 4; // Scale the value
+
+    if (raw_value < 30 || raw_value > -30) {
         return scaled_value = 0; // Dead zone
     } else {
-        return scaled_value = ((raw_value - 30) * 510) / 4065 - 255;
+        return scaled_value = raw_value;
     }
 }
 
@@ -68,16 +71,12 @@ void x_task() {
     MovingAverage ma;
     init_moving_average(&ma);
 
-    adc_init();
-    adc_gpio_init(28);
-    adc_select_input(0);
-
     while (1) {
         data.axis = 0; // seta que a axis é X 
         data.val = scaled_value((&ma, adc_read())); // filtra a média móvel da entrada analógia e converte em valor binário
         xQueueSend(xQueueAdc, &data, portMAX_DELAY);
-        printf('valor de x: %d', data.val);
-        sleep_ms(100);
+        // printf('valor de x: %d', data.val);
+        // sleep_ms(100);
     }
 }
 
@@ -86,29 +85,37 @@ void y_task() {
     MovingAverage ma;
     init_moving_average(&ma);
 
-    adc_init();
-    adc_gpio_init(27);
-    adc_select_input(0);
-
     while (1) {
         data.axis = 1; // seta que a axis é X 
         data.val = scaled_value((&ma, adc_read())); // filtra a média móvel da entrada analógia e converte em valor binário
         xQueueSend(xQueueAdc, &data, portMAX_DELAY);
-        printf('valor de y: %d', data.val); 
-        sleep_ms(100);
+        // printf('valor de y: %d', data.val); 
+        // sleep_ms(100);
+        
     }
 }
 
 void uart_task(void *p) {
     adc_t data;
 
-    while (1) {
-        xQueueReceive(xQueueAdc, &data, portMAX_DELAY);
+    if (uxQueueMessagesWaiting(xQueueAdc) > 0) {
+        if (xQueueReceive(xQueueAdc, &data, portMAX_DELAY) == pdTRUE) {
+            uart_write_blocking(uart0, data.axis, 1);
+            uart_write_blocking(uart0, data.val >> 8, 1); // desloca para pegar o byte mais significativo
+            uart_write_blocking(uart0, data.val, 1); 
+            uart_write_blocking(uart0, 0xFF, 1);
+        }
+        
     }
 }
 
 int main() {
     stdio_init_all();
+    adc_init();
+    adc_gpio_init(27); // pino do y
+    adc_select_input(0);
+    adc_gpio_init(28); // pino do x
+    adc_select_input(0);
 
     xQueueAdc = xQueueCreate(32, sizeof(adc_t));
 

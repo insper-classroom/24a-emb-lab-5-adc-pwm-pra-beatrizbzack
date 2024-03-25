@@ -35,6 +35,8 @@ try:
             data = ser.read(1)
             if data == b'\xff':
                 break
+            else:
+                print(f"Received data: {data}") 
 
         # Read 4 bytes from UART
         data = ser.read(3)
