@@ -56,7 +56,7 @@ int moving_average(MovingAverage *ma, int new_value) {
 int scaled_value(int raw_value) {
     int scaled_value;
     raw_value -= 2048; // Center the value
-    raw_value /= 4; // Scale the value
+    raw_value /= 16; // Scale the value
 
     if (raw_value < 30 || raw_value > -30) {
         return scaled_value = 0; // Dead zone
@@ -120,10 +120,12 @@ void uart_task(void *p) {
             // uart_write_blocking(uart0, data.val >> 8, 1); // desloca para pegar o byte mais significativo
             // uart_write_blocking(uart0, data.val, 1); 
             // uart_write_blocking(uart0, 0xFF, 1); // -1 => EOP fim do pacote
-            printf(data.axis);
-            printf(data.val>>8);
-            printf(data.val);
-            printf(0xFF); 
+            // printf(data.axis);
+            // printf(data.val>>8);
+            // printf(data.val);
+            // printf(0xFF); 
+            // Envie os dados no formato especificado
+            printf("%d %d %d -1\n", data.axis, (data.val >> 8) & 0xFF, data.val & 0xFF);
         }
         
     }
