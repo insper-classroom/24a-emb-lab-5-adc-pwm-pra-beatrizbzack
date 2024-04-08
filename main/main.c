@@ -81,7 +81,7 @@ void x_task() {
     while (1) {
         data.axis = 0; // seta que a axis é X 
         u_int16_t val_x = adc_read(); 
-        data.val = scaled_value(moving_average(&ma,val_x)); // filtra a média móvel da entrada analógia e converte em valor binário
+        data.val = scaled_value(moving_average(&ma,(int)val_x)); // filtra a média móvel da entrada analógia e converte em valor binário
         xQueueSend(xQueueAdc, &data, portMAX_DELAY);
         printf("valor de x: %lf", data.val); 
         sleep_ms(100);
@@ -102,7 +102,7 @@ void y_task() {
     while (1) {
         data.axis = 1; // seta que a axis é X 
         u_int16_t val_y = adc_read();
-        data.val = scaled_value(moving_average(&ma, val_y)); // filtra a média móvel da entrada analógia e converte em valor binário
+        data.val = scaled_value(moving_average(&ma, (int)val_y)); // filtra a média móvel da entrada analógia e converte em valor binário
         xQueueSend(xQueueAdc, &data, portMAX_DELAY);
         printf("valor de y: %lf", data.val); 
         sleep_ms(100);
