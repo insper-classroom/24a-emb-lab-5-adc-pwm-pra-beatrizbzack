@@ -1,6 +1,6 @@
 /*
  * LED blink with FreeRTOS
-*/
+ */
 #include <FreeRTOS.h>
 #include <task.h>
 #include <semphr.h>
@@ -15,26 +15,15 @@
 
 QueueHandle_t xQueueAdc;
 
-const int pinoX = 26;
-const int pinoXADC = 0;
-const int pinoY = 27;
-const int pinoYADC = 1;
-
 typedef struct adc {
     int axis;
     int val;
 } adc_t;
 
-void write_package(adc_t data) {
-    int val = data.val;
-    int msb = val >> 8;
-    int lsb = val & 0xFF ;
-
-    uart_putc_raw(uart0, data.axis); 
-    uart_putc_raw(uart0, lsb);
-    uart_putc_raw(uart0, msb); 
-    uart_putc_raw(uart0, -1); 
-}
+const int pinoX = 26;
+const int pinoXADC = 0;
+const int pinoY = 27;
+const int pinoYADC = 1;
 
 // Implementação do filtro de média móvel
 #define WINDOW_SIZE 5
@@ -74,94 +63,86 @@ int scaled_value(int raw_value) {
     raw_value -= 2048; // Center the value
     raw_value /= 8; // Scale the value
 
-    if (raw_value < 170 && raw_value > -170) {
+    if (raw_value < 80 && raw_value > -80) {
         return scaled_value = 0; // Dead zone
     } else {
         return scaled_value = raw_value;
     }
 }
 
-// FUNÇÕES PARA A LEITURA DA PORTA ANALÓGICA DE X E Y 
-void x_task() {
+void write_package(adc_t data) {
+    int val = data.val;
+    int msb = val >> 8;
+    int lsb = val & 0xFF ;
 
-    MovingAverage ma;
-    init_moving_average(&ma); 
-
-    adc_init();
-    adc_gpio_init(pinoXADC); // pino do x
-
-    printf("x task executando"); 
-
-    while (1) {
-        adc_t data;
-
-        adc_select_input(pinoX);
-        data.axis = 0; // seta que a axis é X 
-        int val_x = adc_read(); 
-        data.val = scaled_value(moving_average(&ma, val_x)); // filtra a média móvel da entrada analógia e converte em valor binário
-        xQueueSend(xQueueAdc, &data, portMAX_DELAY);
-        printf("valor de x: %lf", data.val); 
-        sleep_ms(100);
-    }
+    uart_putc_raw(uart0, data.axis); 
+    uart_putc_raw(uart0, lsb);
+    uart_putc_raw(uart0, msb); 
+    uart_putc_raw(uart0, -1); 
 }
 
-void y_task() {
+void x_task(void *p) {
     adc_init();
-    adc_gpio_init(pinoYADC); // pino do y
+    adc_gpio_init(pinoX); 
 
     MovingAverage ma;
     init_moving_average(&ma);
 
-    printf("y task executando"); 
-
     while (1) {
-        adc_t data;
-        adc_select_input(pinoY);
-        data.axis = 1; // seta que a axis é X 
-        int val_y = adc_read();
-        data.val = scaled_value(moving_average(&ma, val_y)); // filtra a média móvel da entrada analógia e converte em valor binário
-        xQueueSend(xQueueAdc, &data, portMAX_DELAY);
-        printf("valor de y: %lf", data.val); 
-        sleep_ms(100);
-        
+        adc_select_input(pinoXADC);
+        int x = moving_average(&ma, adc_read());
+        x = scaled_value(x); // escala o valor
+        struct adc x_data = {0,x};
+        xQueueSend(xQueueAdc, &x_data, portMAX_DELAY);
+
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
+
+void y_task(void *p) {
+    adc_init();
+    adc_gpio_init(pinoY);
+
+    MovingAverage ma;
+    init_moving_average(&ma);
+
+    while (1) {
+        adc_select_input(pinoYADC);
+        int y = moving_average(&ma, adc_read());
+        y = scaled_value(y); // escala o valor
+        struct adc y_data = {1,y};
+        xQueueSend(xQueueAdc, &y_data, portMAX_DELAY);
+
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
+
+
 
 void uart_task(void *p) {
     adc_t data;
-    // printf("iniciando task uart"); 
 
-    if (uxQueueMessagesWaiting(xQueueAdc) > 0) {
-        if (xQueueReceive(xQueueAdc, &data, portMAX_DELAY) == pdTRUE) {
-            // uart_write_blocking(uart0, data.axis, 1); // envia o valor do eixo
-            // uart_write_blocking(uart0, data.val >> 8, 1); // desloca para pegar o byte mais significativo
-            // uart_write_blocking(uart0, data.val, 1); 
-            // uart_write_blocking(uart0, 0xFF, 1); // -1 => EOP fim do pacote
-            // printf(data.axis);
-            // printf(data.val>>8);
-            // printf(data.val);
-            // printf(0xFF); 
-            // Envie os dados no formato especificado
-            printf("%d %d %d -1\n", data.axis, (data.val >> 8) & 0xFF, data.val & 0xFF);
-            write_package(data); 
-        }
-        
+    while (1) {
+        xQueueReceive(xQueueAdc, &data, portMAX_DELAY);
+
+        // data.val = (data.val-2047)/8;
+        // int zone_limit = 80;
+        // if (data.val <=zone_limit && data.val >= -1*(zone_limit)) {
+        //     data.val = 0;
+        // }
+        // printf("Axis: %d, Value: %d\n", data.axis, data.val);
+        write_package(data);
     }
 }
 
-
 int main() {
-
     stdio_init_all();
-
     xQueueAdc = xQueueCreate(32, sizeof(adc_t));
 
+    xTaskCreate(x_task, "x_task", 256, NULL, 1, NULL);
+    xTaskCreate(y_task, "y_task", 256, NULL, 1, NULL);
     xTaskCreate(uart_task, "uart_task", 4096, NULL, 1, NULL);
-    xTaskCreate(x_task, "x_task", 4096, NULL, 1, NULL);
-    xTaskCreate(y_task, "y_task", 4096, NULL, 1, NULL);
-
     vTaskStartScheduler();
 
-    while (true)
-        ;
+    while (true);
 }
