@@ -63,8 +63,8 @@ int scaled_value(int raw_value) {
     raw_value -= 2048; // Center the value
     raw_value /= 8; // Scale the value
 
-    if (raw_value < 80 && raw_value > -80) {
-        return scaled_value = 0; // Dead zone
+    if (raw_value < 150 && raw_value > -150) {
+        return scaled_value = 0; // Dead zone ---- fica entre x 145 e 1 130
     } else {
         return scaled_value = raw_value;
     }
