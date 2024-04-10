@@ -15,10 +15,26 @@
 
 QueueHandle_t xQueueAdc;
 
+const int pinoX = 26;
+const int pinoXADC = 0;
+const int pinoY = 27;
+const int pinoYADC = 1;
+
 typedef struct adc {
     int axis;
     int val;
 } adc_t;
+
+void write_package(adc_t data) {
+    int val = data.val;
+    int msb = val >> 8;
+    int lsb = val & 0xFF ;
+
+    uart_putc_raw(uart0, data.axis); 
+    uart_putc_raw(uart0, lsb);
+    uart_putc_raw(uart0, msb); 
+    uart_putc_raw(uart0, -1); 
+}
 
 // Implementação do filtro de média móvel
 #define WINDOW_SIZE 5
@@ -56,9 +72,9 @@ int moving_average(MovingAverage *ma, int new_value) {
 int scaled_value(int raw_value) {
     int scaled_value;
     raw_value -= 2048; // Center the value
-    raw_value /= 16; // Scale the value
+    raw_value /= 8; // Scale the value
 
-    if (raw_value < 30 || raw_value > -30) {
+    if (raw_value < 170 && raw_value > -170) {
         return scaled_value = 0; // Dead zone
     } else {
         return scaled_value = raw_value;
@@ -68,20 +84,21 @@ int scaled_value(int raw_value) {
 // FUNÇÕES PARA A LEITURA DA PORTA ANALÓGICA DE X E Y 
 void x_task() {
 
-    adc_t data;
     MovingAverage ma;
     init_moving_average(&ma); 
 
     adc_init();
-    adc_gpio_init(26); // pino do x
-    adc_select_input(0);
+    adc_gpio_init(pinoXADC); // pino do x
 
     printf("x task executando"); 
 
     while (1) {
+        adc_t data;
+
+        adc_select_input(pinoX);
         data.axis = 0; // seta que a axis é X 
-        u_int16_t val_x = adc_read(); 
-        data.val = scaled_value(moving_average(&ma,(int)val_x)); // filtra a média móvel da entrada analógia e converte em valor binário
+        int val_x = adc_read(); 
+        data.val = scaled_value(moving_average(&ma, val_x)); // filtra a média móvel da entrada analógia e converte em valor binário
         xQueueSend(xQueueAdc, &data, portMAX_DELAY);
         printf("valor de x: %lf", data.val); 
         sleep_ms(100);
@@ -90,19 +107,19 @@ void x_task() {
 
 void y_task() {
     adc_init();
-    adc_gpio_init(27); // pino do y
-    adc_select_input(1);
+    adc_gpio_init(pinoYADC); // pino do y
 
-    adc_t data;
     MovingAverage ma;
     init_moving_average(&ma);
 
     printf("y task executando"); 
 
     while (1) {
+        adc_t data;
+        adc_select_input(pinoY);
         data.axis = 1; // seta que a axis é X 
-        u_int16_t val_y = adc_read();
-        data.val = scaled_value(moving_average(&ma, (int)val_y)); // filtra a média móvel da entrada analógia e converte em valor binário
+        int val_y = adc_read();
+        data.val = scaled_value(moving_average(&ma, val_y)); // filtra a média móvel da entrada analógia e converte em valor binário
         xQueueSend(xQueueAdc, &data, portMAX_DELAY);
         printf("valor de y: %lf", data.val); 
         sleep_ms(100);
@@ -126,6 +143,7 @@ void uart_task(void *p) {
             // printf(0xFF); 
             // Envie os dados no formato especificado
             printf("%d %d %d -1\n", data.axis, (data.val >> 8) & 0xFF, data.val & 0xFF);
+            write_package(data); 
         }
         
     }
